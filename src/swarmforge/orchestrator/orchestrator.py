@@ -59,7 +59,8 @@ class MissionRunner:
             self.store.update_mission(mission_id, status="spawning")
 
             # ── seed repo + sandbox backend (local mode seeds per mission) ─
-            repo_dir = self.repo_dir or make_repo(self._mission_dir(mission_id) / "repo")
+            repo_dir = self.repo_dir or await asyncio.to_thread(
+                make_repo, self._mission_dir(mission_id) / "repo")
             self.repo_dir = repo_dir
             if getattr(self.backend, "repo_dir", None) is None:
                 self.backend.repo_dir = repo_dir  # local backend

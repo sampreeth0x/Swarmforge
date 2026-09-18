@@ -68,7 +68,7 @@ class Agent:
             Message(role="system", content=self.cfg.system_prompt),
             Message(role="user", content=f"# Task\n{task}\n\n# Context\n{_format_context(context)}"),
         ]
-        self.store.update_agent(self.cfg.agent_id, status="running")
+        self.store.update_agent(self.mission_id, self.cfg.agent_id, status="running")
 
         for step in range(1, self.cfg.max_steps + 1):
             await self.bus.publish(
@@ -99,24 +99,24 @@ class Agent:
                     messages.append(Message(role="tool", content=result,
                                             tool_call_id=tc.id, name=tc.name))
                 if should_stop is not None and should_stop():
-                    self.store.update_agent(self.cfg.agent_id, status="done")
+                    self.store.update_agent(self.mission_id, self.cfg.agent_id, status="done")
                     return AgentResult(agent_id=self.cfg.agent_id,
                                        final_text="[submitted]", ok=True, steps=step)
                 continue
 
-            self.store.update_agent(self.cfg.agent_id, status="done")
+            self.store.update_agent(self.mission_id, self.cfg.agent_id, status="done")
             return AgentResult(agent_id=self.cfg.agent_id, final_text=resp.message.content,
                                ok=True, steps=step)
 
-        self.store.update_agent(self.cfg.agent_id, status="max_steps")
+        self.store.update_agent(self.mission_id, self.cfg.agent_id, status="max_steps")
         return AgentResult(agent_id=self.cfg.agent_id,
                            final_text="[max steps reached without a final answer]",
                            ok=False, steps=self.cfg.max_steps, error="max_steps")
 
     async def _account(self, resp: LLMResponse) -> None:
         u = resp.usage
-        self.store.add_usage(self.cfg.agent_id, u.prompt_tokens, u.completion_tokens,
-                             u.cost_usd, 1)
+        self.store.add_usage(self.mission_id, self.cfg.agent_id, u.prompt_tokens,
+                             u.completion_tokens, u.cost_usd, 1)
         if u.prompt_tokens or u.completion_tokens:
             await self.bus.publish(
                 EventKind.USAGE, self.mission_id,

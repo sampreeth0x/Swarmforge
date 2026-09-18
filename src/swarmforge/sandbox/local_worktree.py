@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shlex
 import shutil
 import sys
@@ -32,32 +33,37 @@ class LocalWorktreeBackend:
             raise RuntimeError("LocalWorktreeBackend has no repo_dir assigned")
         return self.repo_dir
 
+    # Blocking subprocess calls must run off the event loop, or a multi-second
+    # pytest run freezes SSE / the API for every connected dashboard.
+    async def _git(self, *args: str, cwd: str | None = None, timeout_s: float = 600) -> tuple[int, str, str]:
+        return await asyncio.to_thread(run_cmd, git_argv(cwd or str(self._repo()), *args),
+                                       timeout_s=timeout_s)
+
     # ── lifecycle ─────────────────────────────────────────────────────────
     async def create(self, spec: SandboxSpec, *, label: str) -> SandboxHandle:
         sid = uuid.uuid4().hex[:8]
         wt = self.root / f"{label.replace('/', '_')}-{sid}"
         branch = f"swarm/{label}-{sid}"
         base = spec.base_ref or "main"
-        run_cmd(git_argv(str(self._repo()), "worktree", "add", str(wt.resolve()),
-                         "-b", branch, base))
+        await self._git("worktree", "add", str(wt.resolve()), "-b", branch, base)
         if spec.setup_cmd:
-            run_cmd(shlex.split(spec.setup_cmd), cwd=str(wt), timeout_s=300)
+            await asyncio.to_thread(run_cmd, shlex.split(spec.setup_cmd),
+                                    cwd=str(wt), timeout_s=300)
         return SandboxHandle(id=sid, backend=self.name, workdir=str(wt),
-                             label=label, branch=branch, state_id=self._head(str(wt)))
+                             label=label, branch=branch, state_id=await self._head(str(wt)))
 
     async def fork(self, h: SandboxHandle, *, label: str) -> SandboxHandle:
         cid = uuid.uuid4().hex[:8]
         wt = self.root / f"{label.replace('/', '_')}-{cid}"
         branch = f"swarm/{label}-{cid}"
-        run_cmd(git_argv(str(self._repo()), "worktree", "add", str(wt.resolve()),
-                         "-b", branch, h.branch or "main"))
+        await self._git("worktree", "add", str(wt.resolve()), "-b", branch, h.branch or "main")
         return SandboxHandle(id=cid, backend=self.name, workdir=str(wt),
-                             label=label, branch=branch, state_id=self._head(str(wt)),
+                             label=label, branch=branch, state_id=await self._head(str(wt)),
                              parent_id=h.id)
 
     async def teardown(self, h: SandboxHandle) -> None:
-        run_cmd(git_argv(str(self._repo()), "worktree", "remove", "--force", h.workdir))
-        run_cmd(git_argv(str(self._repo()), "branch", "-D", h.branch), timeout_s=30)
+        await self._git("worktree", "remove", "--force", h.workdir)
+        await self._git("branch", "-D", h.branch, timeout_s=30)
 
     # ── execution ─────────────────────────────────────────────────────────
     async def exec(self, h: SandboxHandle, cmd: str | list[str], *, cwd: str | None = None,
@@ -66,9 +72,10 @@ class LocalWorktreeBackend:
         argv = self._remap_interpreter(argv)
         workdir = str(Path(h.workdir) / cwd) if cwd else h.workdir
         start = time.monotonic()
-        code, out, err = run_cmd(argv, cwd=workdir, timeout_s=timeout_s)
+        code, out, err = await asyncio.to_thread(run_cmd, argv, cwd=workdir, timeout_s=timeout_s)
         return ExecResult(exit_code=code, stdout=out, stderr=err,
-                          duration_s=time.monotonic() - start, state_id=self._head(h.workdir))
+                          duration_s=time.monotonic() - start,
+                          state_id=await self._head(h.workdir))
 
     # ── filesystem ────────────────────────────────────────────────────────
     async def read_file(self, h: SandboxHandle, path: str) -> str:
@@ -92,26 +99,24 @@ class LocalWorktreeBackend:
 
     # ── git ───────────────────────────────────────────────────────────────
     async def commit(self, h: SandboxHandle, message: str) -> str:
-        run_cmd(git_argv(h.workdir, "add", "-A"))
-        code, _, _ = run_cmd(git_argv(h.workdir, "commit", "-m", message))
-        if code != 0:  # nothing to commit is fine — return current head
-            return self._head(h.workdir) or ""
-        return self._head(h.workdir) or ""
+        await self._git("add", "-A", cwd=h.workdir)
+        code, _, _ = await self._git("commit", "-m", message, cwd=h.workdir)
+        return await self._head(h.workdir) or ""
 
     async def diff(self, h: SandboxHandle, *, base_ref: str = "main") -> str:
-        _, out, _ = run_cmd(git_argv(h.workdir, "diff", f"{base_ref}...HEAD"))
+        _, out, _ = await self._git("diff", f"{base_ref}...HEAD", cwd=h.workdir)
         return out
 
     async def export_patch(self, h: SandboxHandle, *, task_id: str, agent_id: str,
                            base_ref: str = "main") -> PatchFile:
         diff = await self.diff(h, base_ref=base_ref)
         stats: dict[str, int] = {}
-        _, numstat, _ = run_cmd(git_argv(h.workdir, "diff", "--numstat", f"{base_ref}...HEAD"))
+        _, numstat, _ = await self._git("diff", "--numstat", f"{base_ref}...HEAD", cwd=h.workdir)
         for line in numstat.splitlines():
             parts = line.split("\t")
             if len(parts) >= 3 and parts[0].isdigit():
                 stats[parts[2]] = int(parts[0])
-        _, msg, _ = run_cmd(git_argv(h.workdir, "log", "-1", "--format=%s"))
+        _, msg, _ = await self._git("log", "-1", "--format=%s", cwd=h.workdir)
         return PatchFile(task_id=task_id, agent_id=agent_id, diff=diff,
                          stats=stats, commit_message=msg.strip())
 
@@ -132,8 +137,8 @@ class LocalWorktreeBackend:
         p.relative_to(root)  # path-traversal guard
         return p
 
-    def _head(self, workdir: str) -> str | None:
-        code, out, _ = run_cmd(git_argv(str(workdir), "rev-parse", "HEAD"), timeout_s=30)
+    async def _head(self, workdir: str) -> str | None:
+        code, out, _ = await self._git("rev-parse", "HEAD", cwd=str(workdir), timeout_s=30)
         return out.strip() if code == 0 else None
 
     def cleanup_all(self) -> None:

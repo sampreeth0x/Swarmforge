@@ -18,7 +18,9 @@ class EventBus:
     async def publish(self, kind: EventKind, mission_id: str, payload: dict | None = None,
                       agent_id: str | None = None) -> Event:
         ev = Event(kind=kind, mission_id=mission_id, payload=payload or {}, agent_id=agent_id)
-        self._store.insert_event(ev)
+        # insert_event returns a copy with the DB-assigned id — fan out THAT one,
+        # or SSE subscribers see id=0 and drop every live frame as "already seen".
+        ev = self._store.insert_event(ev)
         for q in self._queues[None] | self._queues[mission_id]:
             q.put_nowait(ev)
         return ev

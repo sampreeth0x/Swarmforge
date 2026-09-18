@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS candidates (
 );
 CREATE INDEX IF NOT EXISTS idx_candidates_mission ON candidates(mission_id);
 CREATE TABLE IF NOT EXISTS agents (
-    id          TEXT PRIMARY KEY,
+    id          TEXT NOT NULL,
     mission_id  TEXT NOT NULL,
     role        TEXT NOT NULL,
     model       TEXT NOT NULL,
@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS agents (
     steps       INTEGER NOT NULL DEFAULT 0,
     prompt_tokens    INTEGER NOT NULL DEFAULT 0,
     completion_tokens INTEGER NOT NULL DEFAULT 0,
-    cost_usd    REAL NOT NULL DEFAULT 0
+    cost_usd    REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (mission_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_agents_mission ON agents(mission_id);
 """
@@ -266,7 +267,7 @@ class Store:
             (agent_id, mission_id, role, model),
         )
 
-    def update_agent(self, agent_id: str, **fields) -> None:
+    def update_agent(self, mission_id: str, agent_id: str, **fields) -> None:
         allowed = {"status", "steps", "prompt_tokens", "completion_tokens", "cost_usd"}
         sets, params = [], []
         for k, v in fields.items():
@@ -274,18 +275,19 @@ class Store:
                 continue
             sets.append(f"{k} = ?")
             params.append(v)
-        params.append(agent_id)
-        self._exec(f"UPDATE agents SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        params += [mission_id, agent_id]
+        self._exec(f"UPDATE agents SET {', '.join(sets)} WHERE mission_id = ? AND id = ?", tuple(params))
 
     def get_agents(self, mission_id: str) -> list[dict]:
         return [dict(r) for r in self._rows("SELECT * FROM agents WHERE mission_id = ?", (mission_id,))]
 
-    def add_usage(self, agent_id: str, prompt_tokens: int, completion_tokens: int,
+    def add_usage(self, mission_id: str, agent_id: str, prompt_tokens: int, completion_tokens: int,
                   cost_usd: float, steps: int = 1) -> None:
         self._exec(
             "UPDATE agents SET prompt_tokens = prompt_tokens + ?, completion_tokens ="
-            " completion_tokens + ?, cost_usd = cost_usd + ?, steps = steps + ? WHERE id = ?",
-            (prompt_tokens, completion_tokens, cost_usd, steps, agent_id),
+            " completion_tokens + ?, cost_usd = cost_usd + ?, steps = steps + ?"
+            " WHERE mission_id = ? AND id = ?",
+            (prompt_tokens, completion_tokens, cost_usd, steps, mission_id, agent_id),
         )
 
 

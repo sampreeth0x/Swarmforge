@@ -20,7 +20,9 @@ HEARTBEAT_SECONDS = 15.0
 
 
 def _sse(ev: Event) -> str:
-    return f"id: {ev.id}\nevent: {ev.kind}\ndata: {json.dumps(ev.to_sse_dict())}\n\n"
+    # No `event:` line — named event types don't fire EventSource.onmessage,
+    # and the kind is already in the JSON payload.
+    return f"id: {ev.id}\ndata: {json.dumps(ev.to_sse_dict())}\n\n"
 
 
 @router.get("/{mission_id}/events")

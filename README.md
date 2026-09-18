@@ -65,31 +65,40 @@ Wi-Fi dies.
 
 ## Architecture
 
-```
-POST /api/missions ──▶ MissionRunner
-                          │
-            ┌─────────────▼──────────────┐
-            │  Planner (Super)  ── plan DAG (JSON, repair round)
-            ├────────────────────────────┤
-            │  WorkerPool (Nano ×N)      │   each worker:
-            │   atomic SQLite task claim │   own sandbox → tool loop →
-            │   dependency waves         │   fork? → submit_candidate
-            ├────────────────────────────┤
-            │  Verifier  fresh sandbox per candidate, real pytest
-            ├────────────────────────────┤
-            │  Judge (Super)  rank passing candidates
-            ├────────────────────────────┤
-            │  Merge arena  apply --3way + re-test per patch,
-            │               agentic conflict repair
-            └─────────────┬──────────────┘
-                          ▼
-             swarm/<mission> branch + MISSION_DONE
+```mermaid
+flowchart TB
+    U["👤 Feature request<br/>POST /api/missions"] --> MR
+
+    subgraph MR["MissionRunner — event-sourced in SQLite"]
+        direction TB
+        P["🧭 Planner · Nemotron Super<br/>request → subtask DAG (strict JSON + repair round)"]
+        W["⚡ WorkerPool · Nemotron Nano ×N<br/>atomic task claim · dependency waves<br/>own sandbox → tool loop → fork? → submit_candidate"]
+        V["🧪 Verifier<br/>fresh sandbox per candidate<br/>real pytest + acceptance criteria"]
+        J["⚖️ Judge · Nemotron Super<br/>ranks passing candidates"]
+        M["🧬 Merge arena<br/>git apply --3way · re-test after every patch<br/>agentic conflict repair"]
+        P --> W --> V --> J --> M
+    end
+
+    M --> OUT["🌿 swarm/&lt;mission&gt; branch<br/>+ MISSION_DONE"]
+    MR -. "every tool call / test / token<br/>streams live over SSE" .-> D["🖥️ Dashboard<br/>swarm graph · event stream · diffs · verdict · usage"]
 ```
 
 Every agent action publishes an event (SQLite-backed `EventBus`) that fans out over
 **SSE** — snapshot-first with `Last-Event-ID` replay, so a dashboard refresh
 mid-mission never loses the plot. Kill the server mid-mission and it **resumes on
 restart**. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## See it in action
+
+Full mock mission (zero API keys) — planner → 2 racing workers → verification
+→ judge → merge arena, watched live from the mission-control dashboard:
+
+![SwarmForge dashboard mid-mission](docs/screenshots/dashboard-live.png)
+
+Final state: the winning candidate's diff merged to the arena branch, judge
+verdict recorded, per-role token cost on the top bar:
+
+![SwarmForge dashboard after merge](docs/screenshots/dashboard-done.png)
 
 ## Sandboxes
 

@@ -112,6 +112,8 @@ export function SwarmGraph({ mission, events }: { mission: Mission | null; event
   const laidOut = layout(nodes, edges);
   return (
     <ReactFlow
+      // Re-fit the viewport when the topology grows (workers/stages appear mid-mission).
+      key={`${nodes.length}-${edges.length}`}
       nodes={laidOut}
       edges={edges}
       nodeTypes={nodeTypes}

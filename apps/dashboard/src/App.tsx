@@ -39,8 +39,16 @@ export default function App() {
 
   const ranking = useMemo<RankingEntry[]>(() => {
     const ev = [...events].reverse().find((e) => e.kind === "verdict");
-    if (ev) return (ev.payload.ranking as RankingEntry[]) ?? [];
-    return [];
+    if (!ev) return [];
+    if (Array.isArray(ev.payload.ranking)) return ev.payload.ranking as RankingEntry[];
+    // Backend emits {winners: [candidate_id, ...], reason} — synthesize entries.
+    const winners = (ev.payload.winners as string[] | undefined) ?? [];
+    return winners.map((cid, i) => ({
+      candidate_id: cid,
+      rank: i + 1,
+      winner: i === 0,
+      reason: i === 0 ? (ev.payload.reason as string | undefined) : undefined,
+    }));
   }, [events]);
 
   const tabs = ["log", "diff"] as const;

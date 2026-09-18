@@ -17,6 +17,7 @@ build/
 # Node / dashboard
 node_modules/
 apps/dashboard/dist/
+*.tsbuildinfo
 
 # SwarmForge runtime artifacts
 data/

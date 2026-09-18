@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from swarmforge.api.routes_diff import router as diff_router
 from swarmforge.api.routes_events import router as events_router
 from swarmforge.api.routes_missions import router as missions_router
 from swarmforge.config import Config, load_config
@@ -40,6 +41,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         from swarmforge.orchestrator.orchestrator import MissionRunner, rehydrate_pending_missions
 
         runner = MissionRunner(cfg, store, bus)
+        app.state.runner = runner
         app.state.run_mission = runner.run_mission
         rehydrate_pending_missions(store, bus, runner)
         yield
@@ -53,6 +55,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     )
     app.include_router(missions_router)
     app.include_router(events_router)
+    app.include_router(diff_router)
 
     @app.get("/api/health")
     async def health() -> dict:

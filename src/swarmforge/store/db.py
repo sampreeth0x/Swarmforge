@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS missions (
     updated_at  TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS tasks (
-    id          TEXT PRIMARY KEY,
     mission_id  TEXT NOT NULL REFERENCES missions(id),
+    id          TEXT NOT NULL,
     seq         INTEGER NOT NULL,
     title       TEXT NOT NULL,
     instructions TEXT NOT NULL,
@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     status      TEXT NOT NULL DEFAULT 'pending',
     assigned_agent TEXT,
     attempts    INTEGER NOT NULL DEFAULT 0,
-    updated_at  TEXT NOT NULL
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (mission_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id, status);
 CREATE TABLE IF NOT EXISTS events (
@@ -181,7 +182,7 @@ class Store:
             out.append(d)
         return out
 
-    def update_task(self, task_id: str, **fields) -> None:
+    def update_task(self, mission_id: str, task_id: str, **fields) -> None:
         allowed = {"status", "assigned_agent", "attempts"}
         sets, params = [], []
         for k, v in fields.items():
@@ -189,8 +190,9 @@ class Store:
                 continue
             sets.append(f"{k} = ?")
             params.append(v)
-        params.append(task_id)
-        self._exec(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        params += [mission_id, task_id]
+        self._exec(f"UPDATE tasks SET {', '.join(sets)} WHERE mission_id = ? AND id = ?",
+                   tuple(params))
 
     def claim_ready_task(self, mission_id: str, agent_id: str) -> dict | None:
         """Atomically claim the first READY task whose dependencies are all DONE."""
@@ -206,14 +208,16 @@ class Store:
                     dep_statuses = {
                         r["id"]: r["status"]
                         for r in c.execute(
-                            f"SELECT id, status FROM tasks WHERE id IN ({placeholders})",
-                            tuple(deps)).fetchall()
+                            f"SELECT id, status FROM tasks WHERE mission_id = ?"
+                            f" AND id IN ({placeholders})",
+                            (mission_id, *deps)).fetchall()
                     }
                 if all(dep_statuses.get(d) == "done" for d in deps):
                     claimed = dict(row)
                     cur = c.execute(
                         "UPDATE tasks SET status = 'claimed', assigned_agent = ?, attempts = attempts + 1"
-                        " WHERE id = ? AND status = 'ready'", (agent_id, row["id"]))
+                        " WHERE mission_id = ? AND id = ? AND status = 'ready'",
+                        (agent_id, mission_id, row["id"]))
                     if cur.rowcount == 1:
                         claimed.update(status="claimed", assigned_agent=agent_id)
                         return claimed

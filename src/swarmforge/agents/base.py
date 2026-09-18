@@ -79,7 +79,7 @@ class Agent:
             resp: LLMResponse = await self.llm.chat(
                 messages, tools=self.tools.specs(), model=self.cfg.model,
                 temperature=self.cfg.temperature, role=self.cfg.role,
-                session=self.cfg.agent_id)
+                session=f"{self.mission_id}:{self.cfg.agent_id}")
             await self._account(resp)
 
             if resp.message.tool_calls:

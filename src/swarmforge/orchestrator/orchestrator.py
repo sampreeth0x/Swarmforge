@@ -130,7 +130,7 @@ def rehydrate_pending_missions(store, bus, runner: MissionRunner) -> list[asynci
         mid = mission["id"]
         for t in store.get_tasks(mid):
             if t["status"] in ("claimed", "running", "retrying"):
-                store.update_task(t["id"], status="ready")
+                store.update_task(mid, t["id"], status="ready")
         log.info("resuming mission %s (was %s)", mid, mission["status"])
         tasks.append(asyncio.create_task(runner.run_mission(mid)))
     return tasks

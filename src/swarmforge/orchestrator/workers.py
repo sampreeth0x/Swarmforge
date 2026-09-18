@@ -52,7 +52,7 @@ class WorkerPool:
                     if claimed is None:
                         break
                     agent_id = f"w-{claimed['id']}-a{claimed['attempts']}"
-                    self.store.update_task(claimed["id"], status="running",
+                    self.store.update_task(self.mid, claimed["id"], status="running",
                                            assigned_agent=agent_id)
                     await self.bus.publish(EventKind.TASK_CLAIMED, self.mid,
                                            {"task_id": claimed["id"], "title": claimed["title"],
@@ -80,7 +80,7 @@ class WorkerPool:
         done = {t["id"] for t in tasks if t["status"] == "done"}
         for t in tasks:
             if t["status"] == "pending" and all(d in done for d in t["depends_on"]):
-                self.store.update_task(t["id"], status="ready")
+                self.store.update_task(self.mid, t["id"], status="ready")
 
     # ── one worker = one agent = one sandbox ──────────────────────────────
     async def _run_worker(self, task: dict, agent_id: str) -> None:
@@ -106,7 +106,7 @@ class WorkerPool:
             }, should_stop=submitted.is_set)
 
             if submitted.is_set:
-                self.store.update_task(task["id"], status="done")
+                self.store.update_task(self.mid, task["id"], status="done")
             else:
                 await self._retry_or_fail(task, f"worker ended without submitting: {result.error}")
         except Exception as exc:  # noqa: BLE001 — a worker crash must not kill the swarm
@@ -155,9 +155,9 @@ class WorkerPool:
     async def _retry_or_fail(self, task: dict, reason: str) -> None:
         attempts = task.get("attempts", 1)
         if attempts < MAX_ATTEMPTS:
-            self.store.update_task(task["id"], status="ready", attempts=attempts + 1)
+            self.store.update_task(self.mid, task["id"], status="ready", attempts=attempts + 1)
             await self.bus.publish(EventKind.AGENT_STEP, self.mid,
                                    {"task_id": task["id"], "retrying": True,
                                     "reason": reason[:200]})
         else:
-            self.store.update_task(task["id"], status="failed")
+            self.store.update_task(self.mid, task["id"], status="failed")

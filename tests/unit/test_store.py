@@ -46,7 +46,7 @@ def test_claim_is_atomic(store: Store) -> None:
     mid = store.create_mission("x", 8)
     _seed_tasks(store, mid, 10)
     for i in range(10):
-        store.update_task(f"t{i}", status="ready")
+        store.update_task(mid, f"t{i}", status="ready")
 
     claimed: list[str] = []
     lock = threading.Lock()
@@ -74,14 +74,14 @@ def test_dependency_wave(store: Store) -> None:
         {"id": "t0", "title": "first", "instructions": "i"},
         {"id": "t1", "title": "second", "instructions": "i", "depends_on": ["t0"]},
     ])
-    store.update_task("t0", status="ready")
-    store.update_task("t1", status="ready")
+    store.update_task(mid, "t0", status="ready")
+    store.update_task(mid, "t1", status="ready")
 
     first = store.claim_ready_task(mid, "a0")
     assert first["id"] == "t0"
     # t1 not claimable until t0 done — simulate by marking t1 ready but t0 claimed
-    store.update_task("t1", status="ready")
+    store.update_task(mid, "t1", status="ready")
     assert store.claim_ready_task(mid, "a1") is None  # t0 is 'claimed', not 'done'
-    store.update_task("t0", status="done")
+    store.update_task(mid, "t0", status="done")
     got = store.claim_ready_task(mid, "a1")
     assert got is not None and got["id"] == "t1"

@@ -138,7 +138,7 @@ class LocalWorktreeBackend:
 
     def cleanup_all(self) -> None:
         """Remove stray worktrees left by crashed runs."""
-        if self.repo_dir.is_dir():
+        if self.repo_dir and self.repo_dir.is_dir():
             run_cmd(git_argv(str(self._repo()), "worktree", "prune"))
         if self.root.is_dir():
             shutil.rmtree(self.root, ignore_errors=True)

@@ -45,6 +45,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.run_mission = runner.run_mission
         rehydrate_pending_missions(store, bus, runner)
         yield
+        # local backend: prune worktrees left by crashed missions
+        if getattr(runner.backend, "name", "") == "local":
+            runner.backend.cleanup_all()
 
     app = FastAPI(title="SwarmForge", version="0.1.0", lifespan=lifespan)
     app.add_middleware(

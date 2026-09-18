@@ -45,6 +45,10 @@ class Config(BaseSettings):
     target_repo: Path = ROOT_DIR / "examples" / "target-repo"
     sandbox_root: Path = ROOT_DIR / "data" / "worktrees"
 
+    # Optional: wrap real LLM calls with RecordingProvider and save replayable
+    # scenario YAML here (demo fallback if venue Wi-Fi dies).
+    record_dir: Path | None = None
+
     @property
     def llm_api_key(self) -> str:
         return self.nebius_api_key if self.mode == "tokenfactory" else self.nim_api_key

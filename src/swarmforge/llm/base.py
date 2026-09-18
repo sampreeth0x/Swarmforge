@@ -83,3 +83,20 @@ def provider_factory(name: str, config) -> LLMProvider:
         return OpenAICompatProvider(base_url=config.nim_base_url, api_key=config.nim_api_key,
                                     name="nim")
     raise ValueError(f"unknown LLM provider mode: {name!r}")
+
+
+def wrap_recording(provider: LLMProvider, config) -> LLMProvider:
+    """If config.record_dir is set, wrap the provider so the run is recorded."""
+    record_dir = getattr(config, "record_dir", None)
+    if record_dir is None:
+        return provider
+    from swarmforge.llm.recording import RecordingProvider
+
+    return RecordingProvider(provider)
+
+
+def recording_of(provider: LLMProvider):
+    """Return the RecordingProvider in the chain, if any."""
+    from swarmforge.llm.recording import RecordingProvider
+
+    return provider if isinstance(provider, RecordingProvider) else None

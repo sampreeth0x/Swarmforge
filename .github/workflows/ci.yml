@@ -23,3 +23,15 @@ jobs:
         run: uv run ruff check src tests
       - name: Test
         run: uv run pytest -q
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --extra dev
+      - name: E2E mock mission (boots server, waits for merge)
+        run: uv run python scripts/e2e_mock.py

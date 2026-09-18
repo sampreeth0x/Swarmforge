@@ -9,7 +9,7 @@ from pathlib import Path
 from swarmforge.config import Config
 from swarmforge.events.bus import EventBus
 from swarmforge.events.events import EventKind
-from swarmforge.llm.base import provider_factory
+from swarmforge.llm.base import provider_factory, recording_of, wrap_recording
 from swarmforge.orchestrator.judge import Judge
 from swarmforge.orchestrator.merger import Merger
 from swarmforge.orchestrator.planner import Planner
@@ -26,7 +26,7 @@ class MissionRunner:
         self.cfg = config
         self.store = store
         self.bus = bus
-        self.llm = provider_factory(config.mode, config)
+        self.llm = wrap_recording(provider_factory(config.mode, config), config)
         self.repo_dir = repo_dir  # local backends: lazily seeded per mission
         self.backend = backend_factory(
             config.sandbox_backend,
@@ -105,6 +105,21 @@ class MissionRunner:
             self.store.update_mission(mission_id, status="failed", error=str(exc)[:500])
             await self.bus.publish(EventKind.MISSION_FAILED, mission_id,
                                    {"error": str(exc)[:500]})
+        finally:
+            self._save_recording(mission_id)
+
+    def _save_recording(self, mission_id: str) -> None:
+        """Persist recorded LLM transcripts as replayable mock scenarios, if recording."""
+        rec = recording_of(self.llm)
+        if rec is None or self.cfg.record_dir is None:
+            return
+        out = Path(self.cfg.record_dir)
+        for role in ("planner", "worker", "verifier", "judge", "merger"):
+            try:
+                rec.save_scenarios(out / f"{mission_id[:8]}_{role}.yaml", role=role)
+            except Exception:  # noqa: BLE001 — recording must never fail a mission
+                log.exception("failed to save %s recording", role)
+        log.info("recorded scenarios for mission %s → %s", mission_id, out)
 
     # ── helpers ───────────────────────────────────────────────────────────
     def _persist_plan(self, mission_id: str, plan) -> list[str]:

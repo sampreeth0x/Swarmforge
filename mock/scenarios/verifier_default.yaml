@@ -1,0 +1,9 @@
+# Catch-all verifier scenario — trusts the sandbox's pytest run recorded in context.
+match:
+  role: verifier
+steps:
+  - final: |
+      {"passed": true,
+       "test_output": "mock verifier: test suite green in sandbox",
+       "criteria_check": [],
+       "notes": "mock scenario"}

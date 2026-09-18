@@ -1,0 +1,13 @@
+# Catch-all worker scenario — explore, run tests, submit.
+match:
+  role: worker
+steps:
+  - tool_calls:
+      - name: list_files
+        arguments: {path: "."}
+      - name: run_command
+        arguments: {argv: ["python", "-m", "pytest", "tests/", "-q"]}
+      - name: git_commit
+        arguments: {message: "chore: worker checkpoint"}
+      - name: submit_candidate
+        arguments: {summary: "No-op change: validated the sandbox and test suite"}

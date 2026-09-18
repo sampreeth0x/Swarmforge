@@ -1,0 +1,58 @@
+# Demo scenario: "Add dark mode support" — a worker writes a real dark theme
+# into the fixture repo. The judge then picks it in merge mode.
+match:
+  role: worker
+  prompt_contains: dark mode
+steps:
+  - tool_calls:
+      - name: read_file
+        arguments: {path: "app.py"}
+      - name: read_file
+        arguments: {path: "templates/base.html"}
+      - name: write_file
+        arguments:
+          path: "static/dark.css"
+          content: |
+            /* Dark theme — added by SwarmForge worker. */
+            body.dark {
+              background: #101418;
+              color: #e6e6e6;
+            }
+            body.dark a { color: #7ab7ff; }
+      - name: write_file
+        arguments:
+          path: "app.py"
+          content: |
+            """A tiny page renderer — the fixture repo the swarm modifies during missions."""
+
+            _ALLOWED_THEMES = {"light", "dark"}
+
+
+            def load_template() -> str:
+                with open("templates/base.html", encoding="utf-8") as f:
+                    return f.read()
+
+
+            def render_page(title: str, body: str, theme: str = "light") -> str:
+                """Render the index page with the given theme (light or dark)."""
+                if theme not in _ALLOWED_THEMES:
+                    raise ValueError(f"unknown theme: {theme!r}")
+                html = load_template()
+                html = html.replace("{{ title }}", title)
+                html = html.replace("{{ theme }}", theme)
+                html = html.replace("{{ body }}", body)
+                return html
+
+
+            def main() -> None:
+                print(render_page("Fixture", "<p>Hello from the target repo.</p>"))
+
+
+            if __name__ == "__main__":
+                main()
+      - name: run_command
+        arguments: {argv: ["python", "-m", "pytest", "tests/", "-q"]}
+      - name: git_commit
+        arguments: {message: "feat: add dark theme with theme validation"}
+      - name: submit_candidate
+        arguments: {summary: "Added dark theme (static/dark.css) and theme validation in render_page"}

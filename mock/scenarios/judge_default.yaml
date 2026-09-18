@@ -1,0 +1,9 @@
+# Catch-all judge scenario — ranks candidates by id, winner = first.
+match:
+  role: judge
+steps:
+  - final: |
+      {"ranking": [
+        {"candidate_id": "{{ first_candidate_id }}", "winner": true, "score": 9.0,
+         "rationale": "mock judge: first candidate"}
+      ]}

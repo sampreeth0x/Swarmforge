@@ -1,0 +1,19 @@
+# Catch-all planner scenario — decomposes any request into two parallel tasks.
+match:
+  role: planner
+steps:
+  - final: |
+      {"plan": [
+        {"id": "t1",
+         "title": "Implement the requested feature",
+         "instructions": "Implement the user's requested change. Touch only the files needed. Add or update tests covering the change, then run python -m pytest tests/ -q to verify.",
+         "acceptance_criteria": ["the repo's test suite passes", "the change is covered by a test"],
+         "depends_on": [],
+         "files_touched": []},
+        {"id": "t2",
+         "title": "Document the change in the repo README",
+         "instructions": "Add a short section to README.md describing the requested change. Do not touch other files.",
+         "acceptance_criteria": ["README.md mentions the change"],
+         "depends_on": [],
+         "files_touched": ["README.md"]}
+      ]}

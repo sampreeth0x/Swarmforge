@@ -28,11 +28,15 @@ class MissionRunner:
         self.bus = bus
         self.llm = wrap_recording(provider_factory(config.mode, config), config)
         self.repo_dir = repo_dir  # local backends: lazily seeded per mission
-        self.backend = backend_factory(
-            config.sandbox_backend,
-            root_dir=config.sandbox_root,
-            repo_dir=repo_dir,
-        ) if config.sandbox_backend == "local" else None
+        if config.sandbox_backend == "local":
+            self.backend = backend_factory("local", root_dir=config.sandbox_root,
+                                           repo_dir=repo_dir)
+        else:
+            self.backend = backend_factory(
+                "contree", base_url=config.sandboxes_base_url,
+                iam_token=config.nebius_iam_token,
+                project_id=config.nebius_project_id,
+                base_image=config.contree_base_image)
 
     async def run_mission(self, mission_id: str) -> None:
         mission = self.store.get_mission(mission_id)
@@ -58,7 +62,9 @@ class MissionRunner:
             repo_dir = self.repo_dir or make_repo(self._mission_dir(mission_id) / "repo")
             self.repo_dir = repo_dir
             if getattr(self.backend, "repo_dir", None) is None:
-                self.backend.repo_dir = repo_dir
+                self.backend.repo_dir = repo_dir  # local backend
+            if getattr(self.backend, "name", "") == "contree":
+                self.backend.repo_source = repo_dir
             self.store.update_mission(mission_id, status="executing")
 
             # ── executing: the swarm races ────────────────────────────────

@@ -32,6 +32,9 @@ class Config(BaseSettings):
     # ── Sandboxes ─────────────────────────────────────────────────────────
     sandbox_backend: str = "local"  # local | contree
     nebius_project_id: str = Field(default="", validation_alias="NEBIUS_PROJECT_ID")
+    nebius_iam_token: str = Field(default="", validation_alias="NEBIUS_IAM_TOKEN")
+    sandboxes_base_url: str = "https://api.tokenfactory.nebius.com/sandboxes"
+    contree_base_image: str = "tag:python:3.12-slim"
 
     # ── Swarm sizing ──────────────────────────────────────────────────────
     workers: int = 4

@@ -1,0 +1,6 @@
+/* Base styles — shared across themes. */
+main {
+  font-family: system-ui, sans-serif;
+  margin: 2rem auto;
+  max-width: 40rem;
+}

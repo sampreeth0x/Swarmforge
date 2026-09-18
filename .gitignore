@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node / dashboard
+node_modules/
+apps/dashboard/dist/
+
+# SwarmForge runtime artifacts
+data/
+*.db
+*.db-wal
+*.db-shm
+.worktrees/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

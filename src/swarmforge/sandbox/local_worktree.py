@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 import shutil
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -21,10 +22,15 @@ class LocalWorktreeBackend:
 
     name = "local"
 
-    def __init__(self, root_dir: Path, repo_dir: Path) -> None:
+    def __init__(self, root_dir: Path, repo_dir: Path | None = None) -> None:
         self.root = Path(root_dir)
-        self.repo_dir = Path(repo_dir)
+        self.repo_dir = repo_dir  # may be assigned later (per-mission seeding)
         self.root.mkdir(parents=True, exist_ok=True)
+
+    def _repo(self) -> Path:
+        if self.repo_dir is None:
+            raise RuntimeError("LocalWorktreeBackend has no repo_dir assigned")
+        return self.repo_dir
 
     # ── lifecycle ─────────────────────────────────────────────────────────
     async def create(self, spec: SandboxSpec, *, label: str) -> SandboxHandle:
@@ -32,7 +38,7 @@ class LocalWorktreeBackend:
         wt = self.root / f"{label.replace('/', '_')}-{sid}"
         branch = f"swarm/{label}-{sid}"
         base = spec.base_ref or "main"
-        run_cmd(git_argv(str(self.repo_dir), "worktree", "add", str(wt.resolve()),
+        run_cmd(git_argv(str(self._repo()), "worktree", "add", str(wt.resolve()),
                          "-b", branch, base))
         if spec.setup_cmd:
             run_cmd(shlex.split(spec.setup_cmd), cwd=str(wt), timeout_s=300)
@@ -43,20 +49,21 @@ class LocalWorktreeBackend:
         cid = uuid.uuid4().hex[:8]
         wt = self.root / f"{label.replace('/', '_')}-{cid}"
         branch = f"swarm/{label}-{cid}"
-        run_cmd(git_argv(str(self.repo_dir), "worktree", "add", str(wt.resolve()),
+        run_cmd(git_argv(str(self._repo()), "worktree", "add", str(wt.resolve()),
                          "-b", branch, h.branch or "main"))
         return SandboxHandle(id=cid, backend=self.name, workdir=str(wt),
                              label=label, branch=branch, state_id=self._head(str(wt)),
                              parent_id=h.id)
 
     async def teardown(self, h: SandboxHandle) -> None:
-        run_cmd(git_argv(str(self.repo_dir), "worktree", "remove", "--force", h.workdir))
-        run_cmd(git_argv(str(self.repo_dir), "branch", "-D", h.branch), timeout_s=30)
+        run_cmd(git_argv(str(self._repo()), "worktree", "remove", "--force", h.workdir))
+        run_cmd(git_argv(str(self._repo()), "branch", "-D", h.branch), timeout_s=30)
 
     # ── execution ─────────────────────────────────────────────────────────
     async def exec(self, h: SandboxHandle, cmd: str | list[str], *, cwd: str | None = None,
                    timeout_s: int = 600) -> ExecResult:
         argv = cmd if isinstance(cmd, list) else shlex.split(cmd)
+        argv = self._remap_interpreter(argv)
         workdir = str(Path(h.workdir) / cwd) if cwd else h.workdir
         start = time.monotonic()
         code, out, err = run_cmd(argv, cwd=workdir, timeout_s=timeout_s)
@@ -110,6 +117,15 @@ class LocalWorktreeBackend:
 
     # ── internals ─────────────────────────────────────────────────────────
     @staticmethod
+    def _remap_interpreter(argv: list[str]) -> list[str]:
+        """Local sandboxes run on the host, so bare `python` means the interpreter
+        swarmforge itself runs under (venv) — not the base interpreter on PATH,
+        which lacks the project's dev deps like pytest."""
+        if argv and Path(argv[0]).name.lower() in ("python", "python3", "python.exe"):
+            return [sys.executable, *argv[1:]]
+        return argv
+
+    @staticmethod
     def _resolve_in(workdir: str, path: str) -> Path:
         root = Path(workdir).resolve()
         p = (Path(workdir) / path).resolve()
@@ -123,6 +139,6 @@ class LocalWorktreeBackend:
     def cleanup_all(self) -> None:
         """Remove stray worktrees left by crashed runs."""
         if self.repo_dir.is_dir():
-            run_cmd(git_argv(str(self.repo_dir), "worktree", "prune"))
+            run_cmd(git_argv(str(self._repo()), "worktree", "prune"))
         if self.root.is_dir():
             shutil.rmtree(self.root, ignore_errors=True)

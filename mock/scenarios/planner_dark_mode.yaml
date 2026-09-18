@@ -1,0 +1,23 @@
+# Demo scenario: dark mode request → plan whose instructions carry the keywords
+# so worker scenarios (dark_mode.yaml) match.
+match:
+  role: planner
+  prompt_contains: dark mode
+steps:
+  - final: |
+      {"plan": [
+        {"id": "t1",
+         "title": "Add dark mode support",
+         "instructions": "Add dark mode support to the fixture repo. Create static/dark.css with dark theme styles, update app.py so render_page validates the theme argument (only 'light' and 'dark' allowed, raising ValueError otherwise), and add tests in tests/test_app.py covering the dark theme and invalid-theme rejection. Run python -m pytest tests/ -q to verify.",
+         "acceptance_criteria": ["python -m pytest tests/ -q passes",
+                                  "static/dark.css exists",
+                                  "render_page rejects unknown themes"],
+         "depends_on": [],
+         "files_touched": ["static/dark.css", "app.py", "tests/test_app.py"]},
+        {"id": "t2",
+         "title": "Document the new theme in the README",
+         "instructions": "Add a 'Themes' section to README.md describing the newly added theme feature. Documentation only; do not touch code files.",
+         "acceptance_criteria": ["README.md contains a Themes section"],
+         "depends_on": [],
+         "files_touched": ["README.md"]}
+      ]}

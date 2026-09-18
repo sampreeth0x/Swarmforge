@@ -7,7 +7,6 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 
 from swarmforge.api.schemas import MissionCreate, MissionOut
-from swarmforge.events.events import EventKind
 
 router = APIRouter(prefix="/api/missions", tags=["missions"])
 
@@ -20,8 +19,7 @@ def _ctx(request: Request):
 async def create_mission(body: MissionCreate, request: Request) -> MissionOut:
     store, bus = _ctx(request)
     mid = store.create_mission(body.request, body.workers)
-    await bus.publish(EventKind.MISSION_CREATED, mid, {"request": body.request, "workers": body.workers})
-    # The orchestrator wires in on Day 4; kick it off if present.
+    # mission.created is published by the orchestrator so CLI missions emit it too.
     runner = getattr(request.app.state, "run_mission", None)
     if runner is not None:
         asyncio.create_task(runner(mid))

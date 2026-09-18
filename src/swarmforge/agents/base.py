@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -58,8 +59,10 @@ class Agent:
             cfg.system_prompt = (PROMPTS_DIR / f"{cfg.role}.md").read_text(encoding="utf-8")
         self.store.upsert_agent(cfg.agent_id, mission_id, cfg.role, cfg.model)
 
-    async def run(self, task: str, context: dict[str, Any] | None = None) -> AgentResult:
-        """Run the tool-calling loop to completion."""
+    async def run(self, task: str, context: dict[str, Any] | None = None,
+                  should_stop: Callable[[], bool] | None = None) -> AgentResult:
+        """Run the tool-calling loop to completion. `should_stop` ends the loop
+        after a tool batch (e.g. the worker called submit_candidate)."""
         context = context or {}
         messages: list[Message] = [
             Message(role="system", content=self.cfg.system_prompt),
@@ -95,6 +98,10 @@ class Agent:
                         agent_id=self.cfg.agent_id)
                     messages.append(Message(role="tool", content=result,
                                             tool_call_id=tc.id, name=tc.name))
+                if should_stop is not None and should_stop():
+                    self.store.update_agent(self.cfg.agent_id, status="done")
+                    return AgentResult(agent_id=self.cfg.agent_id,
+                                       final_text="[submitted]", ok=True, steps=step)
                 continue
 
             self.store.update_agent(self.cfg.agent_id, status="done")

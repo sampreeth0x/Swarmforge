@@ -32,9 +32,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         store = Store(cfg.db_path)
+        bus = EventBus(store)
         app.state.store = store
-        app.state.bus = EventBus(store)
+        app.state.bus = bus
         app.state.config = cfg
+
+        from swarmforge.orchestrator.orchestrator import MissionRunner, rehydrate_pending_missions
+
+        runner = MissionRunner(cfg, store, bus)
+        app.state.run_mission = runner.run_mission
+        rehydrate_pending_missions(store, bus, runner)
         yield
 
     app = FastAPI(title="SwarmForge", version="0.1.0", lifespan=lifespan)

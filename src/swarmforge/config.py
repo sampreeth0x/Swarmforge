@@ -42,6 +42,8 @@ class Config(BaseSettings):
     port: int = 8000
     db_path: Path = ROOT_DIR / "data" / "swarmforge.db"
     scenario_dir: Path = ROOT_DIR / "mock" / "scenarios"
+    target_repo: Path = ROOT_DIR / "examples" / "target-repo"
+    sandbox_root: Path = ROOT_DIR / "data" / "worktrees"
 
     @property
     def llm_api_key(self) -> str:
